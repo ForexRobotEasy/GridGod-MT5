@@ -1,0 +1,93 @@
+
+// GridGod MT5 Expert Advisor
+// Developer's Site: forexroboteasy.com
+// Development: Forex Robot Easy Team
+
+// Import necessary libraries and define variables
+#include <Trade\Trade.mqh>
+#include <Arrays\ArrayObj.mqh>
+
+input double LotSize = 0.01; // Default lot size
+input double GridStep = 10; // Default grid step
+input double TakeProfit = 50; // Default take profit value
+input double StopLoss = 100; // Default stop loss value
+
+CTrade trade; // Trade object
+
+// Initialize the Expert Advisor
+int OnInit()
+{
+    trade.SetExpertMagicNumber(123456); // Set expert magic number
+    return(INIT_SUCCEEDED);
+}
+
+// Start trading
+void OnTick()
+{
+    MqlRates rates[1]; // Array to store current rates
+    if(CopyRates(_Symbol, PERIOD_H1, 0, 1, rates) == 1)
+    {
+        double currentPrice = rates[0].close; // Get current price
+        
+        double entryPrice = NormalizeDouble(currentPrice - (GridStep * MathRound(currentPrice / GridStep)), _Digits); // Calculate entry price
+        
+        double previousEntryPrice = NormalizeDouble(entryPrice - GridStep, _Digits); // Calculate previous entry price
+        
+        double lastBuyPrice = NormalizeDouble(entryPrice - (GridStep * 2), _Digits); // Calculate last buy price
+        
+        double lastSellPrice = NormalizeDouble(entryPrice + (GridStep * 2), _Digits); // Calculate last sell price
+        
+        int totalOrders = trade.PositionsTotal(); // Get total number of orders
+        
+        if(totalOrders == 0)
+        {
+            // Open buy order
+            if(Bid <= entryPrice)
+            {
+                trade.Buy(LotSize, entryPrice, NormalizeDouble(entryPrice + TakeProfit, _Digits), NormalizeDouble(entryPrice - StopLoss, _Digits));
+            }
+            
+            // Open sell order
+            if(Ask >= entryPrice)
+            {
+                trade.Sell(LotSize, entryPrice, NormalizeDouble(entryPrice - TakeProfit, _Digits), NormalizeDouble(entryPrice + StopLoss, _Digits));
+            }
+        }
+        else if(totalOrders > 0)
+        {
+            // Modify buy order
+            if(trade.PositionGetDouble(POSITION_PRICE) != entryPrice && trade.PositionGetDouble(POSITION_PRICE) != previousEntryPrice)
+            {
+                trade.PositionModify(trade.PositionGetInteger(POSITION_TICKET), entryPrice, trade.PositionGetDouble(POSITION_SL), trade.PositionGetDouble(POSITION_TP));
+            }
+            
+            // Close sell order and open new buy order
+            if(trade.PositionGetDouble(POSITION_PRICE) == lastSellPrice && Ask >= entryPrice)
+            {
+                trade.PositionClose(trade.PositionGetInteger(POSITION_TICKET));
+                trade.Buy(LotSize, entryPrice, NormalizeDouble(entryPrice + TakeProfit, _Digits), NormalizeDouble(entryPrice - StopLoss, _Digits));
+            }
+        }
+        else if(totalOrders < 0)
+        {
+            // Modify sell order
+            if(trade.PositionGetDouble(POSITION_PRICE) != entryPrice && trade.PositionGetDouble(POSITION_PRICE) != previousEntryPrice)
+            {
+                trade.PositionModify(trade.PositionGetInteger(POSITION_TICKET), entryPrice, trade.PositionGetDouble(POSITION_SL), trade.PositionGetDouble(POSITION_TP));
+            }
+            
+            // Close buy order and open new sell order
+            if(trade.PositionGetDouble(POSITION_PRICE) == lastBuyPrice && Bid <= entryPrice)
+            {
+                trade.PositionClose(trade.PositionGetInteger(POSITION_TICKET));
+                trade.Sell(LotSize, entryPrice, NormalizeDouble(entryPrice - TakeProfit, _Digits), NormalizeDouble(entryPrice + StopLoss, _Digits));
+            }
+        }
+    }
+}
+
+// Stop trading
+void OnDeinit(const int reason)
+{
+    trade.PositionCloseAll(); // Close all open positions
+}
